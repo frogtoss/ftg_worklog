@@ -3,8 +3,15 @@ package main
 import (
 	"os"
 
+	"bytes"
 	"fmt"
 	"github.com/alecthomas/kong"
+	"github.com/pelletier/go-toml"
+	"time"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+	"strings"
 )
 
 type CLI struct {
@@ -12,10 +19,12 @@ type CLI struct {
 	WorklogDir string `help:"The worklog dir" short:"w" type:"existingdir"`
 
 	// Commands
-	Incident IncidentCmd `cmd:"" help:"Generate a new incident"`
+	Incident CLIIncidentCmd `cmd:"" help:"Generate a new incident"`
 }
 
-type IncidentCmd struct{}
+type CLIIncidentCmd struct {
+	Service string `help:"The affected service" required:""`
+}
 
 func dirExists(path string) (bool, error) {
 	info, err := os.Stat(path)
@@ -26,6 +35,11 @@ func dirExists(path string) (bool, error) {
 		return false, err
 	}
 	return info.IsDir(), nil
+}
+
+func fileWouldBeNew(path string) bool {
+	_, err := os.Stat(path)
+	return err != nil
 }
 
 func findWorklogDir(worklogDir string) (string, error) {
@@ -49,6 +63,35 @@ func findWorklogDir(worklogDir string) (string, error) {
 	}
 
 	return worklogDir, nil
+}
+
+// Encode any into toml, and wrap in +++ frontmatter chars
+func EncodeFrontmatter(doc any) string {
+	buf := new(bytes.Buffer)
+	encoder := toml.NewEncoder(buf)
+	encoder.Encode(doc)
+	return fmt.Sprintf("+++\n%s+++\n", buf.String())
+}
+
+func GenerateWorklogFilename(worklogType, attendingUser, desc string, startTime time.Time) string {
+	// worklog filename like:
+	//2024.12.08.Incident.HardDriveSpace.MichaelLabbe.md
+
+	fnTrimStr := func(s string) string {
+		s = cases.Title(language.English).String(s)
+		return strings.ReplaceAll(s, " ", "")
+	}
+
+	formattedDate := startTime.Format("2006.01.02")
+	worklogType = fnTrimStr(worklogType)
+	attendingUser = fnTrimStr(attendingUser)
+	desc = fnTrimStr(desc)
+
+	return fmt.Sprintf("%s.%s.%s.%s.md", formattedDate, worklogType, attendingUser, desc)
+}
+
+func ServiceDirFromName(serviceName string) string {
+	return cases.Lower(language.English).String(serviceName)
 }
 
 func realMain() int {

@@ -2,105 +2,85 @@ package main
 
 import (
 	"fmt"
-	"os/user"
-	"time"
+
+	"github.com/frogtoss/ftg_worklog/pkg/frontmatter"
+	"os"
+	"path"
 )
 
-type PrefixIncidentService struct {
-	Name string   `toml:"name"`
-	Envs []string `toml:"envs"`
-}
+const IncidentTMPL = `
+# Incident Response Worklog #
 
-type PrefixIncidentTime struct {
-	LogStart time.Time `toml:"log_start"`
-}
+## Means of Discovery ##
 
-type PrefixIncidentPersonnel struct {
-	Authors   []string `toml:"authors"`
-	Attending []string `toml:"attending"`
-}
+_How was the incident discovered?_
 
-type PrefixIncidentRunbook struct {
-	Path  string `toml:"path"`
-	Title string `toml:"title"`
-}
+## Progress Notes ##
 
-type PrefixIncident struct {
-	Type        string `toml:"type"`
-	Description string `toml:"description"`
+_Raw notes during progress to be preserved_
 
-	Service PrefixIncidentService `toml:"service"`
+## Changes ##
 
-	Severity struct {
-		Rating int `toml:"rating"`
+_Set of changes that were made, and which envs they were deployed to_
 
-		DeveloperCritical bool `toml:"developer_critical"`
-		DeveloperPartial  bool `toml:"developer_partial"`
-		CustomerCritical  bool `toml:"customer_critical"`
-		CustomerPartial   bool `toml:"customer_partial"`
-		HardwareFailure   bool `toml:"hardware_failure"`
-		AffectsRevenue    bool `toml:"affects_revenue"`
-		DataCorruption    bool `toml:"data_corruption"`
-	} `toml:"severity"`
+## Reflections ##
 
-	Time PrefixIncidentTime `toml:"time"`
+_How to catch this sooner / prevent_
 
-	Personnel PrefixIncidentPersonnel `toml:"personnel"`
+`
 
-	Runbook []PrefixIncidentRunbook `toml:"runbook"`
-}
+func (i *CLIIncidentCmd) Run(cli *CLI) error {
 
-func NewPrefixIncidentWithService(serviceName string) PrefixIncident {
-
-	userData, err := user.Current()
-
-	var username string
-	if err != nil {
-		username = "unknown"
-	} else {
-		username = userData.Username
-	}
-
-	return PrefixIncident{
-		Type:        "incident",
-		Description: "",
-
-		Service: PrefixIncidentService{
-			Name: serviceName,
-			Envs: []string{""},
-		},
-
-		Time: PrefixIncidentTime{
-			LogStart: time.Now(),
-		},
-
-		Personnel: PrefixIncidentPersonnel{
-			Authors:   []string{username},
-			Attending: []string{username},
-		},
-
-		Runbook: []PrefixIncidentRunbook{
-			{
-				Path:  "<under ftg_sites>",
-				Title: "",
-			},
-		},
-	}
-}
-
-func (i *IncidentCmd) Run(cli *CLI) error {
-	fmt.Println("Worklog Path:", cli.WorklogDir)
-
+	//
+	// compute full path to generated file
 	worklogDir, err := findWorklogDir(cli.WorklogDir)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("found worklog dir: '%s'\n", worklogDir)
+	incident := frontmatter.NewIncidentWithService(cli.Incident.Service)
 
-	// todo: get service from command line, and it has to match a dir under worklog dir
+	incident.Description = "system test"
 
-	fmt.Printf("%+v\n", NewPrefixIncidentWithService("fuckchew"))
+	worklogFilename := GenerateWorklogFilename("incident",
+		"mlabbe",
+		incident.Description,
+		incident.Time.LogStart)
+
+	serviceDir := ServiceDirFromName(incident.Service.Name)
+
+	fullDir := path.Join(worklogDir, serviceDir)
+	{
+		exists, err := dirExists(fullDir)
+		if !exists || err != nil {
+			return fmt.Errorf("Directory '%s' does not exist.  Wrong service?\n%+v",
+				fullDir, err)
+		}
+	}
+	fullPath := path.Join(fullDir, worklogFilename)
+
+	if !fileWouldBeNew(fullPath) {
+		return fmt.Errorf("File '%s' already exists.", fullPath)
+	}
+
+	fmt.Printf("Creating '%s'\n", fullPath)
+
+	//
+	// generate full file content
+	body := EncodeFrontmatter(incident)
+	body += IncidentTMPL
+
+	err = os.WriteFile(fullPath, []byte(body), 0644)
+	if err != nil {
+		return err
+	}
+
+	err = LaunchEditorForFile(fullPath)
+	if err != nil {
+		// not a total failure -- file was already successfully written
+		fmt.Fprintf(os.Stderr, "Failed to launch editor for file '%s':\n%+v\nLaunch it manually\n",
+			fullPath, err)
+	}
 
 	return nil
 }
