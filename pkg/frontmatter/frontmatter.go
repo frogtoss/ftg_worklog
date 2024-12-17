@@ -32,8 +32,9 @@ type IncidentRunbook struct {
 type Incident struct {
 	Description string `toml:"description"`
 
-	Type    string `toml:"type"`
-	Version uint   `toml:"version"`
+	Type         string `toml:"type"`
+	Version      uint   `toml:"version"`
+	DocCompleted bool   `toml:"doc_completed"`
 
 	Service IncidentService `toml:"service"`
 
@@ -68,9 +69,10 @@ func NewIncidentWithService(serviceName string) Incident {
 	}
 
 	return Incident{
-		Type:        "incident",
-		Description: "",
-		Version:     FrontmatterVersion,
+		Type:         "incident",
+		Description:  "",
+		Version:      FrontmatterVersion,
+		DocCompleted: false,
 
 		Service: IncidentService{
 			Name: serviceName,
