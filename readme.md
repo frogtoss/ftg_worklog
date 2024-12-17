@@ -14,8 +14,5 @@ Usage:
 
 ## Status ##
 
-Pre-alpha
+Alpha
 
-Todo:
-
- - test on windows
