@@ -137,9 +137,10 @@ func promptForService(worklogDir string) string {
 	}
 
 	var userService string
+	var aborted bool
 	for {
 
-		aborted, userService := InteractivePrompt(completer)
+		aborted, userService = InteractivePrompt(completer)
 		handlePromptAbort(aborted)
 
 		_, match := dirNames[userService]
@@ -210,6 +211,7 @@ func (i *CLIIncidentCmd) Run(cli *CLI) error {
 		incident.Time.LogStart)
 
 	serviceDir := ServiceDirFromName(incident.Service.Name)
+	fmt.Printf("Got service dir %s from name %s\n", serviceDir, incident.Service.Name)
 
 	fullDir := path.Join(worklogDir, serviceDir)
 	{
