@@ -6,9 +6,11 @@ import (
 	"github.com/frogtoss/ftg_worklog/pkg/frontmatter"
 	"os"
 	"path"
-
-	"github.com/c-bata/go-prompt"
 	"strings"
+
+	// docs https://pkg.go.dev/github.com/elk-language/go-prompt
+	"github.com/elk-language/go-prompt"
+	istrings "github.com/elk-language/go-prompt/strings"
 )
 
 const MaxDescriptionLength = 32
@@ -35,45 +37,78 @@ _How to catch this sooner / prevent_
 
 `
 
-func commonOptions() []prompt.Option {
+func commonOptions(aborted *bool) []prompt.Option {
+
+	// ctrl c sets the bool
+	ctrlCBind := prompt.KeyBind{
+		Key: prompt.ControlC,
+		Fn: func(p *prompt.Prompt) bool {
+			*aborted = true
+			return false
+		},
+	}
+
+	// and then exitchecker checks if it was set on each input
+	exitChecker := func(in string, breakline bool) bool {
+		// exit prompt when ctrl-c was pressed
+		return *aborted
+	}
+
 	return []prompt.Option{
-		prompt.OptionInputTextColor(prompt.White),
-		prompt.OptionInputBGColor(prompt.DarkBlue),
-		prompt.OptionPrefixTextColor(prompt.LightGray),
-		prompt.OptionSwitchKeyBindMode(prompt.EmacsKeyBind),
+		prompt.WithPrefix(Prompt),
+		prompt.WithInputTextColor(prompt.White),
+		prompt.WithInputBGColor(prompt.DarkBlue),
+		prompt.WithPrefixTextColor(prompt.LightGray),
+		prompt.WithKeyBind(ctrlCBind),
+		prompt.WithExitChecker(exitChecker),
 	}
 }
 
-func limitLengthFilter(buffer *prompt.Buffer) prompt.Buffer {
-	if len(buffer.Text()) > 32 {
-		buffer.InsertText(buffer.Text()[:32], false, true)
+// InteractivePrompt issues prompt with an optional completer,
+// returning whether it was aborted, and then the string
+func InteractivePrompt(completer prompt.Completer) (bool, string) {
+	aborted := false
+
+	options := commonOptions(&aborted)
+	if completer != nil {
+		options = append(options, prompt.WithCompleter(completer))
 	}
-	return *buffer
+
+	userStr := prompt.Input(options...)
+
+	return aborted, userStr
 }
 
 func promptForIncidentDescription() string {
 
 	fmt.Printf("Enter a description that is %d chars or less.\n", MaxDescriptionLength)
-	desc := ""
+	fmt.Println("eg: \"registry down\", or \"slow response time\"")
+
+	var desc string
+	var aborted bool
 	for len(desc) == 0 || len(desc) > MaxDescriptionLength {
 
-		desc = prompt.Input(
-			Prompt,
-			func(prompt.Document) []prompt.Suggest {
-				return []prompt.Suggest{} // No autocompletion
-			},
-			commonOptions()...,
-		)
+		aborted, desc = InteractivePrompt(nil)
+		handlePromptAbort(aborted)
 	}
 
 	return desc
+}
+
+func handlePromptAbort(abort bool) {
+	if abort {
+		fmt.Println("aborted")
+		os.Exit(1)
+	}
 }
 
 func promptForService(worklogDir string) string {
 	fmt.Print("Which service to create incident for?\n")
 
 	var serviceDirs []prompt.Suggest
+	dirNames := make(map[string]int)
 
+	// suggestions from directory names
 	entries, err := os.ReadDir(worklogDir)
 	if err == nil {
 		for _, entry := range entries {
@@ -88,46 +123,64 @@ func promptForService(worklogDir string) string {
 			serviceDirs = append(serviceDirs,
 				prompt.Suggest{Text: entry.Name(), Description: ""},
 			)
+
+			dirNames[entry.Name()] = 1
 		}
 	}
 
-	service := prompt.Input(
-		Prompt,
-		func(d prompt.Document) []prompt.Suggest {
-			return prompt.FilterHasPrefix(serviceDirs, d.Text, true)
-		},
-		commonOptions()...,
-	)
+	completer := func(d prompt.Document) (suggestions []prompt.Suggest, startChar, endChar istrings.RuneNumber) {
+		endIndex := d.CurrentRuneIndex()
+		w := d.GetWordBeforeCursor()
+		startIndex := endIndex - istrings.RuneCount([]byte(w))
 
-	return service
+		return prompt.FilterHasPrefix(serviceDirs, w, true), startIndex, endIndex
+	}
+
+	var userService string
+	for {
+
+		aborted, userService := InteractivePrompt(completer)
+		handlePromptAbort(aborted)
+
+		_, match := dirNames[userService]
+		if !match {
+			fmt.Printf("service '%s' not found.\n", userService)
+		} else {
+			break
+		}
+	}
+
+	return userService
 }
 
 func promptForConfirmation() bool {
-	fmt.Println("Continue? (y/N)")
+	fmt.Println("Continue? (yes/no)")
 
-	completer := func(d prompt.Document) []prompt.Suggest {
-		suggestions := []prompt.Suggest{
-			{Text: "yes", Description: "Continue"},
-			{Text: "no", Description: "Abort"},
-		}
-		return prompt.FilterHasPrefix(suggestions, d.Text, true)
+	yesNo := []prompt.Suggest{
+		{Text: "yes", Description: ""},
+		{Text: "no", Description: "abort"},
 	}
 
-	input := ""
-	for input == "" {
-		input := prompt.Input(Prompt, completer, commonOptions()...)
+	completer := func(d prompt.Document) (suggestions []prompt.Suggest, startChar, endChar istrings.RuneNumber) {
+		endIndex := d.CurrentRuneIndex()
+		w := d.GetWordBeforeCursor()
+		startIndex := endIndex - istrings.RuneCount([]byte(w))
 
-		switch input {
+		return prompt.FilterHasPrefix(yesNo, w, true), startIndex, endIndex
+	}
+
+	for {
+		aborted, confirm := InteractivePrompt(completer)
+		handlePromptAbort(aborted)
+
+		switch confirm {
 		case "yes":
 			return true
 		case "no":
 			return false
-		default:
-			input = ""
 		}
-	}
 
-	return false
+	}
 }
 
 func (i *CLIIncidentCmd) Run(cli *CLI) error {
