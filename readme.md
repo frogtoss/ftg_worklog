@@ -19,9 +19,3 @@ Pre-alpha
 Todo:
 
  - test on windows
- - test on linux
- - fix terminal restoration bug
- - support ctrl-c abort in prompts
- - support noninteractive launch
- - add version 
- - add build script

@@ -20,12 +20,15 @@ type CLI struct {
 
 	// Commands
 	Incident CLIIncidentCmd `cmd:"" help:"Generate a new incident"`
+	Version  CLIVersionCmd  `cmd:"" help:"Print version and exit"`
 }
 
 type CLIIncidentCmd struct {
 	Service     string `help:"The affected service"`
 	Description string `help:"A short incident description"`
 }
+
+type CLIVersionCmd struct{}
 
 func dirExists(path string) (bool, error) {
 	info, err := os.Stat(path)
