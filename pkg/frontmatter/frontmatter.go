@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const FrontmatterVersion = uint(1)
+
 type IncidentService struct {
 	Name string   `toml:"name"`
 	Envs []string `toml:"envs"`
@@ -28,8 +30,10 @@ type IncidentRunbook struct {
 }
 
 type Incident struct {
-	Type        string `toml:"type"`
 	Description string `toml:"description"`
+
+	Type    string `toml:"type"`
+	Version uint   `toml:"version"`
 
 	Service IncidentService `toml:"service"`
 
@@ -66,6 +70,7 @@ func NewIncidentWithService(serviceName string) Incident {
 	return Incident{
 		Type:        "incident",
 		Description: "",
+		Version:     FrontmatterVersion,
 
 		Service: IncidentService{
 			Name: serviceName,

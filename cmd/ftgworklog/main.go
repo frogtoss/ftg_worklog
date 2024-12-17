@@ -23,7 +23,8 @@ type CLI struct {
 }
 
 type CLIIncidentCmd struct {
-	Service string `help:"The affected service" required:""`
+	Service     string `help:"The affected service"`
+	Description string `help:"A short incident description"`
 }
 
 func dirExists(path string) (bool, error) {
