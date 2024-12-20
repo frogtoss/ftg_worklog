@@ -66,7 +66,7 @@ os.chdir(path_join('cmd', 'ftgworklog'))
 shell(['go', 'install'])
 
 if os.environ.get('FTG_PROJECT_ROOT') is None:
-    os.exit(0)
+    sys.exit(0)
 
 if not find_arg_0param('--skip-install'):
     src_path = get_installed_executable_path(EXE)
